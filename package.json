@@ -1,0 +1,30 @@
+{
+  "name": "mochatime",
+  "version": "0.0.1",
+  "description": "A node app to work with github.com Checks API to ru CI tests.",
+  "main": "webhooksListener.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mbiegert/mochatime.git"
+  },
+  "author": "Max Biegert",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/mbiegert/mochatime/issues"
+  },
+  "homepage": "https://github.com/mbiegert/mochatime#readme",
+  "dependencies": {
+    "@octokit/app": "^4.0.0",
+    "@octokit/plugin-retry": "^2.2.0",
+    "@octokit/plugin-throttling": "^2.6.0",
+    "@octokit/rest": "^16.28.4",
+    "body-parser": "^1.19.0",
+    "dotenv": "^8.0.0",
+    "express": "^4.17.1",
+    "express-github-webhook": "^1.0.6",
+    "smee-client": "^1.1.0"
+  }
+}
