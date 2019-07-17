@@ -14,7 +14,7 @@ function signData(secret, data) {
 }
 
 function verifySignature(secret, data, signature) {
-	return crypto.timingSafeEqual(signature, signData(secret, data));
+	return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(signData(secret, data)));
 }
 
 let app = express();
@@ -67,25 +67,29 @@ app.post('/incoming', (req, res, next) => {
             console.log(data.action);
             return res.status(202).send("No action taken.");
         }
+
         /**
          * CHECK_RUN event
          */
         case 'check_run':
-        console.log(data);
+        //console.log(data);
         // check that we are actually responsible for this check run
-        if (data.app.id.toString() !== process.env.GITHUB_APP_IDENTIFIER) {
+        if (data.check_run.app.id.toString() !== process.env.GITHUB_APP_IDENTIFIER) {
             return res.status(202).send("No action taken, not responsible.");
         }
         if (data.action === "created") {
             // the check run was created and we can start testing, yei
             // start testing
-            return //something
+            let owner = data.repository.owner.login;
+            let checkId = data.check_run.id;
+            mochaJuice.initiateCheckRun(owner, repoName, checkId);
+            return res.status(201).send("Running a check.");
         }
         else if (data.action === "rerequested") {
             // ask github to create a new check_run
             let owner = data.repository.owner.login;
             let sha = data.check_suite.head_sha;
-            mochaJuice.createCheckRun(owner, repo, "Mocha tests", sha);
+            mochaJuice.createCheckRun(owner, repoName, "Mocha tests", sha);
             // don't wait for the api call, but return success
             return res.status(201);
         }
