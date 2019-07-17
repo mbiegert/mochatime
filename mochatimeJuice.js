@@ -9,7 +9,7 @@ const octokit = require('./octoApp');
  * @param {String} name The name of the check run to create.
  * @param {String} commitSha The commit sha for which the check run should be created.
  */
-function createCheckRun (owner, repo, name, commitSha) {
+function createCheckRun(owner, repo, name, commitSha) {
   octokit.checks.create({
     owner,
     repo,
@@ -25,6 +25,38 @@ function createCheckRun (owner, repo, name, commitSha) {
   });
 }
 
+async function initiateCheckRun(owner, repo, checkId) {
+  try {
+    // first update the status to 'in_progress'
+    await octokit.checks.update({
+      owner, repo, check_run_id: checkId,
+      status: 'in_progress',
+      started_at: new Date().toISOString(),
+    });
+    
+    // run mocha
+    
+  }
+  catch (error) {
+    console.error("Failure in initiateCheckrun.");
+    console.error(error);
+  }
+  try {
+    // report result
+    await octokit.checks.update({
+      owner, repo, check_run_id: checkId,
+      status: 'completed',
+      conclusion: 'success',
+      completed_at: new Date().toISOString(),
+    });
+  }
+  catch (error) {
+    console.error("Failure in initiateCheckrun.");
+    console.error(error);
+  }
+}
+
 module.exports = {
   createCheckRun,
+  initiateCheckRun,
 }
