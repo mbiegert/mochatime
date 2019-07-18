@@ -57,35 +57,35 @@ async function initiateCheckRun(owner, repo, checkId, commitHash) {
     // run mocha, see
     // https://github.com/mochajs/mocha/blob/8cae7a34f0b6eafeb16567beb8852b827cc5956b/lib/runner.js#L47-L57
     // for possible events
-    runner.run((failed) => {
-      // mocha is done, delete the repository and report end of checkSuite
-      // delete the directory again
+    runner.run()
+    .on('end', function () {
+      let results = this.testResults;
+
+      // mocha is done, delete the repository
       exec('rm -rf ./'+directory, (error, stdout, stderr) => {
         if (error) {
           console.error("error when removing run dir");
           console.error(error.message);
         }
       });
-    })
-    .on('test end', function(test) {
-      //console.log('Test done: '+test.title);
-    })
-    .on('pass', function(test) {
-      //console.log('Test passed');
-      //console.log(test);
-    })
-    .on('fail', function(test, err) {
-      console.log('Test fail');
-      //console.log(test);
-      //console.log(err);
-      // sneakily add the error message to the test object
-      test.XXErrorMessage = err.message;
-    })
-    .on('suite end', function(suite) {
-      //console.log('Suite ended.');
-      //console.log(suite);
-      if (suite.root) {
-        dispatchMochaResults(suite, owner, repo, checkId);
+      // now report the results to github
+      try {
+        // report result
+        octokit.checks.update({
+          owner, repo, check_run_id: checkId,
+          status: 'completed',
+          conclusion: results.failed?'failure':'success',
+          completed_at: new Date().toISOString(),
+          output: {
+            title: 'Mocha results',
+            summary: results.summary,
+            text: results.text,
+          },
+        });
+      }
+      catch (error) {
+        console.error("Failure when reporting results.");
+        console.error(error);
       }
     });
   }
@@ -102,89 +102,6 @@ async function initiateCheckRun(owner, repo, checkId, commitHash) {
   }
 }
 
-function dispatchMochaResults(rootSuite, owner, repo, checkId) {
-  let numPassed = 0;
-  let numFailed = 0;
-  let text = '';
-  let currentIndentLevel = '###';
-  if (!rootSuite.root) {
-    // whoops, we don't want that
-    return;
-  }
-
-  console.log("Will start wrapping up.");
-
-  // first define some output generating functions
-  function handleSuite(suite) {
-    if (!suite.root) {
-      text += currentIndentLevel + ' Test suite ' + suite.title + '\n';
-      currentIndentLevel += '#';
-    }
-
-    // TODO: tell if checksuite passed/failed
-
-    // handle each test
-    suite.tests.forEach(handleTest);
-
-    // handle subsequent suites
-    suite.suites.forEach(handleSuite);
-
-    if (!suite.root) {
-      currentIndentLevel = currentIndentLevel.slice(1);
-    }
-  }
-
-  function handleTest(test) {
-    if (test.state === 'passed') {
-      text += ':heavy_check_mark: ';
-    }
-    else if (test.state === 'failed') {
-      text += ':x: ';
-    }
-    else {
-      text += ':children_crossing: ';
-    }
-    text += test.title + '\n';
-
-    if (test.state === 'failed') {
-      numFailed++;
-    }
-    else if (test.state === 'passed') {
-      numPassed++;
-    }
-  }
-
-  handleSuite(rootSuite);
-
-  console.log("About to send.");
-
-  let summary = 'Mocha tests concluded with '
-    + numPassed + ' passing and '
-    + numFailed + ' failed tests.';
-
-  // now report the results to github
-  try {
-    // report result
-    text += '\n' + new Date().toLocaleTimeString();
-    console.log(text);
-    octokit.checks.update({
-      owner, repo, check_run_id: checkId,
-      status: 'completed',
-      conclusion: numFailed?'failure':'success',
-      completed_at: new Date().toISOString(),
-      output: {
-        title: 'Mocha results',
-        summary,
-        text,
-      },
-    });
-  }
-  catch (error) {
-    console.error("Failure when reporting results.");
-    console.error(error);
-  }
-
-}
 
 module.exports = {
   createCheckRun,
