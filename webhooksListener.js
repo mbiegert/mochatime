@@ -89,7 +89,7 @@ app.post('/incoming', (req, res, next) => {
         else if (data.action === "rerequested") {
             // ask github to create a new check_run
             let owner = data.repository.owner.login;
-            let sha = data.check_suite.head_sha;
+            let sha = data.check_run.head_sha;
             mochaJuice.createCheckRun(owner, repoName, "Mocha tests", sha);
             // don't wait for the api call, but return success
             return res.status(201);
