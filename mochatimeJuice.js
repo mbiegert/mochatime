@@ -1,6 +1,7 @@
 // this module contains the actual functions that do something
 // octokit instance to reuse
 const octokit = require('./octoApp');
+const { execFileSync, exec } = require('child_process');
 
 /**
  * 
@@ -25,7 +26,7 @@ function createCheckRun(owner, repo, name, commitSha) {
   });
 }
 
-async function initiateCheckRun(owner, repo, checkId) {
+async function initiateCheckRun(owner, repo, checkId, commitHash) {
   try {
     // first update the status to 'in_progress'
     await octokit.checks.update({
@@ -33,26 +34,81 @@ async function initiateCheckRun(owner, repo, checkId) {
       status: 'in_progress',
       started_at: new Date().toISOString(),
     });
-    
+
     // run mocha
-    
-  }
-  catch (error) {
-    console.error("Failure in initiateCheckrun.");
-    console.error(error);
-  }
-  try {
-    // report result
-    await octokit.checks.update({
-      owner, repo, check_run_id: checkId,
-      status: 'completed',
-      conclusion: 'success',
-      completed_at: new Date().toISOString(),
+    let installationAccessToken = await octokit.appInstance.getInstallationAccessToken({
+      installationId: process.env.GITHUB_INSTALLATION_ID,
+    });
+    // create a temporary directory for this run
+    let directory = "run" + checkId;
+    execFileSync('./prepareDir.sh', {
+      stdio: 'ignore',
+      env: {
+        TOKEN: installationAccessToken,
+        OWNER: owner,
+        REPO: repo,
+        DIRECTORY: directory,
+        REF: commitHash,
+      }
+    });
+
+    // run mocha
+    let runner = require('./' + directory + '/mochatimeRunMocha');
+    // run mocha, see
+    // https://github.com/mochajs/mocha/blob/8cae7a34f0b6eafeb16567beb8852b827cc5956b/lib/runner.js#L47-L57
+    // for possible events
+    runner.run((failed) => {
+      // mocha is done, delete the repository and report end of checkSuite
+      // delete the directory again
+      exec('rm -rf ./'+directory, (error, stdout, stderr) => {
+        if (error) {
+          console.error("error when removing run dir");
+          console.error(error.message);
+        }
+      });
+
+      try {
+        // report result
+        octokit.checks.update({
+          owner, repo, check_run_id: checkId,
+          status: 'completed',
+          conclusion: failed?'failure':'success',
+          completed_at: new Date().toISOString(),
+        });
+      }
+      catch (error) {
+        console.error("Failure when reporting results.");
+        console.error(error);
+      }
+    })
+    .on('test end', function(test) {
+      //console.log('Test done: '+test.title);
+    })
+    .on('pass', function(test) {
+      //console.log('Test passed');
+      //console.log(test);
+    })
+    .on('fail', function(test, err) {
+      console.log('Test fail');
+      console.log(test);
+      console.log(err);
+      // todo report failure
+    })
+    .on('suite end', function(suite) {
+      //console.log('Suite ended.');
+      //console.log(suite);
     });
   }
   catch (error) {
     console.error("Failure in initiateCheckrun.");
     console.error(error);
+    // report an aborted run
+    await octokit.checks.update({
+      owner, repo, check_run_id: checkId,
+      status: 'completed',
+      conclusion: 'cancelled',
+      completed_at: new Date().toISOString(),
+    });
   }
 }
 

@@ -29,5 +29,8 @@ const octokit = new Octokit({
   }
 });
 
+// sneakily add the instance of the octokit/app
+octokit.appInstance = app;
+
 // make the app instance available
 module.exports = octokit;

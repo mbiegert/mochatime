@@ -82,7 +82,8 @@ app.post('/incoming', (req, res, next) => {
             // start testing
             let owner = data.repository.owner.login;
             let checkId = data.check_run.id;
-            mochaJuice.initiateCheckRun(owner, repoName, checkId);
+            let commitHash = data.check_run.head_sha;
+            mochaJuice.initiateCheckRun(owner, repoName, checkId, commitHash);
             return res.status(201).send("Running a check.");
         }
         else if (data.action === "rerequested") {
