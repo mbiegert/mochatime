@@ -60,7 +60,7 @@ function MochaTimeGithubReporter (runner, options) {
       failed: runner.stats.failures ? true : false,
     };
 
-    runner.testResults = obj;
+    process.send({ mochaResults: obj });
   });
 }
 
@@ -82,4 +82,7 @@ fs.readdirSync(testDir).filter(function(file) {
 });
 
 
-module.exports = mocha
+mocha.run(failures => {
+  process.exitCode = failures ? 1 : 0;
+  process.exit();
+});

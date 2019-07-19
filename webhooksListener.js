@@ -4,7 +4,9 @@ var bodyParser = require('body-parser');
 const crypto = require('crypto');
 require('dotenv').config();
 
-var mochaJuice = require('./mochatimeJuice');
+var MochaJuice = require('./mochaJuice');
+
+var mochaJuice = new MochaJuice(process.env.GITHUB_INSTALLATION_ID);
 
 /**
  * Helper functions
@@ -19,7 +21,7 @@ function verifySignature(secret, data, signature) {
 
 let app = express();
 app.use(bodyParser.json());
-//app.use(webhookHandler);
+
 // this middleware checks incoming github api webhooks for their validity
 app.post('/incoming', (req, res, next) => {
     // for simplicity we don't use the error handler here, but return an
@@ -48,7 +50,8 @@ app.post('/incoming', (req, res, next) => {
     let repoName = req.body.repository && req.body.repository.name;
     let data = req.body;
 
-    console.log("Received a " + event + " event for the repository " + repoName + ".");
+    //console.log("Received a " + event + " event for the repository " + repoName + ".");
+
 
     switch (event) {
         /**
