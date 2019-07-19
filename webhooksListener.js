@@ -1,12 +1,13 @@
 
-var express = require('express');
-var bodyParser = require('body-parser');
+const express = require('express');
+const bodyParser = require('body-parser');
 const crypto = require('crypto');
+const fs = require('fs');
 require('dotenv').config();
 
 var MochaJuice = require('./mochaJuice');
 
-var mochaJuice = new MochaJuice(process.env.GITHUB_INSTALLATION_ID);
+const installIdsFileName = `${__dirname}/installs.ids`;
 
 /**
  * Helper functions
@@ -18,6 +19,33 @@ function signData(secret, data) {
 function verifySignature(secret, data, signature) {
 	return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(signData(secret, data)));
 }
+
+function loadInstallations() {
+    // read the file containing lines with installation id
+    var instanceMap = {};
+    if (fs.existsSync(installIdsFileName)) {
+        fs.readFileSync(installIdsFileName, 'utf-8')
+        .split('\n')
+        .filter(Boolean)
+        .forEach(str => {
+            const installation = parseInt(str, 10);
+            if (installation) {
+                instanceMap[installation] = new MochaJuice(installation);
+            }
+        });
+    }
+    return instanceMap;
+}
+
+function saveInstallations(mJInstances) {
+    const toSave = Object.keys(mJInstances).join('\n') + '\n';
+
+    // write to file
+    fs.writeFileSync(installIdsFileName, toSave);
+}
+
+// a mapping of installations to MochaJuice instances
+var installations = loadInstallations();
 
 let app = express();
 app.use(bodyParser.json());
@@ -44,6 +72,7 @@ app.post('/incoming', (req, res, next) => {
     return next();
 });
 
+// process and dispatch incoming events
 app.post('/incoming', (req, res, next) => {
     // now handle incoming events
     let event = req.event;
@@ -52,8 +81,55 @@ app.post('/incoming', (req, res, next) => {
 
     //console.log("Received a " + event + " event for the repository " + repoName + ".");
 
+    // select the correct mochaJuice instance
+    if (!data.installation || !data.installation.id) {
+        console.error(`No installation given for event ${event} in ${repoName}.`);
+        return res.status(400).send('Sorry, no installation id was given, we do not handle this here.');
+    }
+    const mochaJuice = installations[data.installation.id];
+    // integration_installation is deprecated and will be removed in the future, but as of July 2019 is still send
+    if (!mochaJuice && event !== 'installation' && event !== 'integration_installation') {
+        console.error(`Installation ${data.installation.id} unknown???`);
+        return res.status(500).send('Unrecoverable error occured, installation unknown.');
+    }
 
     switch (event) {
+        /**
+         * INSTALLATION event
+         */
+        case 'installation':
+        const installId = parseInt(data.installation ? data.installation.id : '0');
+        if (!installId) {
+            console.error('No install id in installation even.');
+            return res.status(400).send('Installation id not provided.');
+        }
+        // somebody installed this app, but only allow
+        // mbiegert, ethjunio, skaan as owner
+        if (data.action === "created") {
+            const accountName = data.installation.account.login;
+            if (accountName !== 'mbiegert'
+                    && accountName !== 'skaan'
+                    && accountName !== 'ethjunio'
+                    && accountName !== 'deeperior') {
+                console.log(`${accountName} tried to install this app, phew.`);
+                return res.status(403).status('Sorry, you are not allowed to install this app.');    
+            }
+            installations[installId] = new MochaJuice(installId);
+            res.status(201).send('Mochatime app successfully installed.');
+            saveInstallations(installations);
+            return true;
+        }
+        else if (data.action === "deleted") {
+            delete installations[installId];
+            res.status(200).send('Mochatime app successfully removed.');
+            saveInstallations(installations);
+            return true;
+        }
+        else {
+            // NoOp
+            return res.sendStatus(204);
+        }
+
         /**
          * CHECK_SUITE event
          */
@@ -66,8 +142,11 @@ app.post('/incoming', (req, res, next) => {
             // don't wait for the api call, but return success
             return res.status(201);
         }
+        else if (data.action === "completed") {
+            return res.status(202).send("No action taken.");
+        }
         else {
-            console.log(data.action);
+            console.log('check_suite event with action ' + data.action);
             return res.status(202).send("No action taken.");
         }
 
@@ -97,20 +176,29 @@ app.post('/incoming', (req, res, next) => {
             // don't wait for the api call, but return success
             return res.status(201);
         }
-        else {
-            console.log(data.action);
+        else if (data.action === "completed") {
             return res.status(202).send("No action taken.");
         }
+        else {
+            console.log('check_run event with action ' + data.action);
+            return res.status(202).send("No action taken.");
+        }
+        /**
+         * Send a noop in case of any other event
+         */
+        default:
+        return res.sendStatus(204);
     }
 });
 
 // handle errors for incoming webhooks
 app.post('/incoming', (error, req, res, next) => {
-    console.log(error);
+    console.error(error);
     res.status(500).send("Server error occured, view log.");
 });
 
 
-app.listen(3000, function () {
-  console.log('Example app listening on port 3000!');
+const port = process.env.PORT || 3000;
+app.listen(port, function () {
+  console.log(`MochaTime app listening on port ${port}!`);
 });

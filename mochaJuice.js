@@ -17,7 +17,6 @@ class MochaJuice {
    * @param {String} commitSha The commit sha for which the check run should be created.
    */
   createCheckRun(owner, repo, name, commitSha) {
-    console.log('trying to create check_suite');
     this.juicyOcto.checks.create({
       owner,
       repo,
