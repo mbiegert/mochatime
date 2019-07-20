@@ -37,9 +37,10 @@ function MochaTimeGithubReporter (runner, options) {
     text += test.title + '\n';
   });
 
-  runner.on(EVENT_TEST_FAIL, function(test) {
+  runner.on(EVENT_TEST_FAIL, function(test, err) {
     text += ':x: ';
     text += test.title + '\n';
+    text += '==> ' + err.message + '\n';
   });
 
   runner.on(EVENT_TEST_PENDING, function(test) {
